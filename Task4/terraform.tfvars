@@ -18,17 +18,12 @@ minio_financial_port          = 9002
 minio_financial_console_port  = 9003
 
 # Kubernetes порты
-k8s_http_port    = 30080
-k8s_https_port   = 30443
 portal_node_port = 30090
 
-# Kubernetes настройки
-kubeconfig_path = "~/.kube/config"
-
 # Legacy системы
-legacy_vm_count = 2
+legacy_vm_count = 1
 
-# Учетные данные (в реальном проекте используйте секреты)
+# Учетные данные
 postgres_db_name = "metadata"
 postgres_username = "admin"
 minio_username = "admin"

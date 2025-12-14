@@ -32,7 +32,7 @@ output "redis_connection" {
   sensitive = true
 }
 
-# Data Lakes
+# Data Lakes - ИСПРАВЛЕНО: добавлен sensitive = true
 output "medical_data_lake" {
   description = "Данные медицинского Data Lake"
   value = {
@@ -42,6 +42,7 @@ output "medical_data_lake" {
     password      = random_password.minio_password.result
     bucket_policy = "Только для медицинских данных"
   }
+  sensitive = true
 }
 
 output "financial_data_lake" {
@@ -53,6 +54,7 @@ output "financial_data_lake" {
     password      = random_password.minio_password.result
     bucket_policy = "Только для финансовых данных"
   }
+  sensitive = true
 }
 
 # Kubernetes
@@ -72,22 +74,11 @@ output "kubernetes_cluster" {
 output "data_portal" {
   description = "Доступ к порталу данных"
   value = {
-    name      = kubernetes_service.portal.metadata[0].name
-    namespace = kubernetes_service.portal.metadata[0].namespace
+    name      = "data-portal"
+    namespace = "analytics"
     url       = "http://localhost:${var.portal_node_port}"
     type      = "NodePort"
   }
-}
-
-# Legacy системы
-output "legacy_vms" {
-  description = "Список legacy контейнеров"
-  value = [
-    for i in range(var.legacy_vm_count) : {
-      name = "${var.project_name}-${var.environment}-legacy-vm-${i + 1}"
-      status = "running"
-    }
-  ]
 }
 
 # Инструкции
@@ -105,7 +96,6 @@ output "infrastructure_summary" {
   
   2. БАЗЫ ДАННЫХ (Аналог RDS/ElastiCache):
      - PostgreSQL (метаданные): localhost:${var.postgres_port}
-       Пользователь: ${var.postgres_username}
      - Redis (кэш): localhost:${var.redis_port}
   
   3. DATA LAKES (Аналог S3):
@@ -122,7 +112,7 @@ output "infrastructure_summary" {
      - URL: http://localhost:${var.portal_node_port}
   
   6. LEGACY СИСТЕМЫ (${var.legacy_vm_count} VM):
-     ${join("\n     ", [for i in range(var.legacy_vm_count) : "- ${var.project_name}-${var.environment}-legacy-vm-${i + 1}"])}
+     Смоделированы как отдельные сервисы
   
   КОМАНДЫ ДЛЯ УПРАВЛЕНИЯ:
   
@@ -135,7 +125,7 @@ output "infrastructure_summary" {
      kubectl get pods -A
   
   3. Проверить доступность сервисов:
-     curl http://localhost:${var.portal_node_port}/health
+     curl http://localhost:${var.portal_node_port}
   
   4. Уничтожить инфраструктуру:
      terraform destroy

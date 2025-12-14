@@ -4,7 +4,7 @@ terraform {
   required_providers {
     docker = {
       source  = "kreuzwerker/docker"
-      version = "~> 2.23" # Используем стабильную версию 2.x
+      version = "~> 2.23"
     }
     kubernetes = {
       source  = "hashicorp/kubernetes"
@@ -28,18 +28,6 @@ terraform {
     }
   }
   
-  # Локальные переменные для удобства
-  locals {
-  network_subnet = one([for config in docker_network.future_network.ipam_config : config.subnet])
-  container_names = [
-    docker_container.postgres_metadata.name,
-    docker_container.redis_cache.name,
-    docker_container.minio_medical.name,
-    docker_container.minio_financial.name,
-    docker_container.legacy_service.name
-    ]
-  }
-
   # Локальный бэкенд - состояние хранится в файле
   backend "local" {
     path = "terraform.tfstate"
@@ -77,6 +65,18 @@ provider "helm" {
   }
 }
 
+# Локальные переменные для удобства
+locals {
+  network_subnet = one([for config in docker_network.future_network.ipam_config : config.subnet])
+  container_names = [
+    docker_container.postgres_metadata.name,
+    docker_container.redis_cache.name,
+    docker_container.minio_medical.name,
+    docker_container.minio_financial.name,
+    docker_container.legacy_service.name
+  ]
+}
+
 # ==================== DOCKER СЕТЬ (Аналог VPC) ====================
 resource "docker_network" "future_network" {
   name = "${var.project_name}-${var.environment}-network"
@@ -85,12 +85,6 @@ resource "docker_network" "future_network" {
     subnet  = var.network_subnet
     gateway = cidrhost(var.network_subnet, 1)
   }
-  
-  # В версии 2.x labels не поддерживаются для network
-  # Можно использовать attrs как альтернативу
-  # attrs = {
-  #   "com.docker.compose.project" = var.project_name
-  # }
 }
 
 # ==================== БАЗЫ ДАННЫХ (Аналог RDS) ====================
@@ -129,7 +123,6 @@ resource "docker_container" "postgres_metadata" {
     retries  = 5
   }
   
-  # В версии 2.x labels задаются через блок
   labels {
     label = "service"
     value = "database"
@@ -275,62 +268,6 @@ resource "docker_container" "minio_financial" {
   labels {
     label = "data-lake"
     value = "financial"
-  }
-}
-
-# ==================== KUBERNETES КЛАСТЕР (Аналог EKS) ====================
-# Безопасный вариант - пропустим создание Kind если нет доступа
-resource "null_resource" "setup_kubernetes" {
-  triggers = {
-    always_run = timestamp()
-  }
-  
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo "Setting up local Kubernetes environment..."
-      
-      # Проверяем, установлен ли kind
-      if command -v kind &> /dev/null; then
-        echo "Kind is installed, checking for existing cluster..."
-        
-        if ! kind get clusters 2>/dev/null | grep -q "${var.project_name}-${var.environment}"; then
-          echo "Creating Kind cluster: ${var.project_name}-${var.environment}"
-          
-          # Создаем конфигурационный файл
-          cat > /tmp/kind-config.yaml << EOF
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-name: ${var.project_name}-${var.environment}
-
-nodes:
-- role: control-plane
-  extraPortMappings:
-  - containerPort: 30080
-    hostPort: ${var.k8s_http_port}
-    protocol: TCP
-  - containerPort: 30443
-    hostPort: ${var.k8s_https_port}
-    protocol: TCP
-  - containerPort: 30090
-    hostPort: ${var.portal_node_port}
-    protocol: TCP
-
-networking:
-  podSubnet: "10.244.0.0/16"
-  serviceSubnet: "10.96.0.0/12"
-EOF
-          
-          kind create cluster --config /tmp/kind-config.yaml --wait 5m
-        else
-          echo "Cluster ${var.project_name}-${var.environment} already exists"
-        fi
-      else
-        echo "Kind is not installed. Kubernetes components will be simulated."
-        echo "To install Kind: curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64 && chmod +x ./kind && sudo mv ./kind /usr/local/bin/"
-      fi
-    EOT
-    
-    interpreter = ["/bin/bash", "-c"]
   }
 }
 

@@ -28,6 +28,18 @@ terraform {
     }
   }
   
+  # Локальные переменные для удобства
+  locals {
+  network_subnet = one([for config in docker_network.future_network.ipam_config : config.subnet])
+  container_names = [
+    docker_container.postgres_metadata.name,
+    docker_container.redis_cache.name,
+    docker_container.minio_medical.name,
+    docker_container.minio_financial.name,
+    docker_container.legacy_service.name
+    ]
+  }
+
   # Локальный бэкенд - состояние хранится в файле
   backend "local" {
     path = "terraform.tfstate"

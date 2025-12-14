@@ -6,47 +6,40 @@ output "docker_network_name" {
 
 output "docker_network_subnet" {
   description = "Подсеть Docker сети"
-  value       = one([for config in docker_network.future_network.ipam_config : config.subnet])
+  value       = var.network_subnet  # Просто возвращаем значение из переменной
 }
 
-# Базы данных
-output "postgres_connection" {
-  description = "Данные для подключения к PostgreSQL"
+# Сервисы
+output "services" {
+  description = "Развернутые сервисы"
   value = {
-    host     = "localhost"
-    port     = var.postgres_port
-    database = var.postgres_db_name
-    username = var.postgres_username
-  }
-  sensitive = true
-}
-
-output "redis_connection" {
-  description = "Данные для подключения к Redis"
-  value = {
-    host     = "localhost"
-    port     = var.redis_port
-  }
-}
-
-# Data Lakes
-output "medical_data_lake_endpoints" {
-  description = "Endpoint'ы медицинского Data Lake"
-  value = {
-    api      = "http://localhost:${var.minio_medical_port}"
-    console  = "http://localhost:${var.minio_medical_console_port}"
-  }
-}
-
-output "financial_data_lake_endpoints" {
-  description = "Endpoint'ы финансового Data Lake"
-  value = {
-    api      = "http://localhost:${var.minio_financial_port}"
-    console  = "http://localhost:${var.minio_financial_console_port}"
+    postgres = {
+      host = "localhost"
+      port = var.postgres_port
+      database = var.postgres_db_name
+    }
+    redis = {
+      host = "localhost"
+      port = var.redis_port
+    }
+    minio_medical = {
+      api      = "http://localhost:${var.minio_medical_port}"
+      console  = "http://localhost:${var.minio_medical_console_port}"
+    }
+    minio_financial = {
+      api      = "http://localhost:${var.minio_financial_port}"
+      console  = "http://localhost:${var.minio_financial_console_port}"
+    }
+    data_portal = {
+      url = "http://localhost:${var.portal_node_port}"
+    }
+    legacy_service = {
+      name = docker_container.legacy_service.name
+    }
   }
 }
 
-# Kubernetes
+# Kubernetes манифесты
 output "kubernetes_manifests" {
   description = "Созданные Kubernetes манифесты"
   value = [
@@ -55,11 +48,6 @@ output "kubernetes_manifests" {
     local_file.namespace_analytics.filename,
     local_file.portal_deployment.filename
   ]
-}
-
-output "data_portal_url" {
-  description = "URL портала данных"
-  value       = "http://localhost:${var.portal_node_port}"
 }
 
 # Инструкции
@@ -73,7 +61,7 @@ output "infrastructure_summary" {
   
   1. СЕТЬ (Аналог VPC):
      - Имя: ${docker_network.future_network.name}
-     - Подсеть: ${one([for config in docker_network.future_network.ipam_config : config.subnet])}
+     - Подсеть: ${var.network_subnet}
   
   2. БАЗЫ ДАННЫХ (Аналог RDS/ElastiCache):
      - PostgreSQL (метаданные): localhost:${var.postgres_port}
@@ -88,7 +76,7 @@ output "infrastructure_summary" {
        API: http://localhost:${var.minio_financial_port}
        Консоль: http://localhost:${var.minio_financial_console_port}
   
-  4. KUBERNETES КЛАСТЕР (Аналог EKS):
+  4. KUBERNETES РЕСУРСЫ:
      - Манифесты созданы в папке: k8s-manifests/
      - Namespaces: medical, fintech, analytics
   
@@ -106,7 +94,7 @@ output "infrastructure_summary" {
   2. Проверить сеть:
      docker network inspect ${docker_network.future_network.name}
   
-  3. Применить Kubernetes манифесты:
+  3. Применить Kubernetes манифесты (если установлен kubectl):
      kubectl apply -f k8s-manifests/
   
   4. Проверить доступность портала:

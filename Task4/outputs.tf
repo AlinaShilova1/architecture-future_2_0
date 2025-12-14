@@ -6,16 +6,16 @@ output "docker_network_name" {
 
 output "docker_network_subnet" {
   description = "Подсеть Docker сети"
-  value       = var.network_subnet  # Просто возвращаем значение из переменной
+  value       = var.network_subnet
 }
 
-# Сервисы
+# Сервисы (без чувствительных данных)
 output "services" {
   description = "Развернутые сервисы"
   value = {
     postgres = {
-      host = "localhost"
-      port = var.postgres_port
+      host     = "localhost"
+      port     = var.postgres_port
       database = var.postgres_db_name
     }
     redis = {
@@ -39,6 +39,17 @@ output "services" {
   }
 }
 
+# Отдельный чувствительный output для паролей
+output "sensitive_data" {
+  description = "Чувствительные данные (пароли)"
+  value = {
+    postgres_password = random_password.postgres_password.result
+    minio_password    = random_password.minio_password.result
+    redis_password    = random_password.redis_password.result
+  }
+  sensitive = true
+}
+
 # Kubernetes манифесты
 output "kubernetes_manifests" {
   description = "Созданные Kubernetes манифесты"
@@ -50,7 +61,7 @@ output "kubernetes_manifests" {
   ]
 }
 
-# Инструкции
+# Инструкции (без чувствительных данных)
 output "infrastructure_summary" {
   description = "Сводка по развернутой инфраструктуре"
   value = <<-EOT
@@ -107,4 +118,18 @@ output "infrastructure_summary" {
   В production-среде компоненты заменяются на AWS RDS, S3, EKS и т.д.
   ================================================================================
   EOT
+}
+
+# URL для быстрого доступа
+output "quick_access_urls" {
+  description = "URL для быстрого доступа к сервисам"
+  value = [
+    "PostgreSQL: localhost:${var.postgres_port}",
+    "Redis: localhost:${var.redis_port}",
+    "MinIO Medical API: http://localhost:${var.minio_medical_port}",
+    "MinIO Medical Console: http://localhost:${var.minio_medical_console_port}",
+    "MinIO Financial API: http://localhost:${var.minio_financial_port}",
+    "MinIO Financial Console: http://localhost:${var.minio_financial_console_port}",
+    "Data Portal: http://localhost:${var.portal_node_port}"
+  ]
 }

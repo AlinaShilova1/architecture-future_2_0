@@ -16,128 +16,124 @@ variable "environment" {
   }
 }
 
-variable "aws_region" {
-  description = "AWS регион"
+# Docker настройки
+variable "docker_host" {
+  description = "Docker host (Unix socket или TCP)"
   type        = string
-  default     = "eu-central-1"
+  default     = "unix:///var/run/docker.sock"
 }
 
-# VPC переменные
-variable "vpc_cidr" {
-  description = "CIDR блок для VPC"
+variable "data_directory" {
+  description = "Базовый путь для хранения данных на хосте"
   type        = string
-  default     = "10.0.0.0/16"
+  default     = "/tmp/future-2-0-data"
 }
 
-variable "availability_zones" {
-  description = "Список availability zones"
-  type        = list(string)
-  default     = ["eu-central-1a", "eu-central-1b", "eu-central-1c"]
-}
-
-variable "private_subnet_cidrs" {
-  description = "CIDR блоки для приватных подсетей"
-  type        = list(string)
-  default     = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
-}
-
-variable "public_subnet_cidrs" {
-  description = "CIDR блоки для публичных подсетей"
-  type        = list(string)
-  default     = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
-}
-
-# EKS переменные
-variable "k8s_version" {
-  description = "Версия Kubernetes"
+# Сеть
+variable "network_subnet" {
+  description = "CIDR подсеть для Docker сети"
   type        = string
-  default     = "1.27"
+  default     = "172.20.0.0/24"
 }
 
-variable "cluster_service_ipv4_cidr" {
-  description = "CIDR для сервисов Kubernetes"
+# Порты сервисов
+variable "postgres_port" {
+  description = "Порт PostgreSQL"
+  type        = number
+  default     = 5432
+}
+
+variable "redis_port" {
+  description = "Порт Redis"
+  type        = number
+  default     = 6379
+}
+
+variable "minio_medical_port" {
+  description = "Порт MinIO медицинского Data Lake"
+  type        = number
+  default     = 9000
+}
+
+variable "minio_medical_console_port" {
+  description = "Порт консоли MinIO медицинского Data Lake"
+  type        = number
+  default     = 9001
+}
+
+variable "minio_financial_port" {
+  description = "Порт MinIO финансового Data Lake"
+  type        = number
+  default     = 9002
+}
+
+variable "minio_financial_console_port" {
+  description = "Порт консоли MinIO финансового Data Lake"
+  type        = number
+  default     = 9003
+}
+
+# Kubernetes порты
+variable "k8s_http_port" {
+  description = "HTTP порт для Kubernetes ingress"
+  type        = number
+  default     = 30080
+}
+
+variable "k8s_https_port" {
+  description = "HTTPS порт для Kubernetes ingress"
+  type        = number
+  default     = 30443
+}
+
+variable "portal_node_port" {
+  description = "NodePort для портала данных"
+  type        = number
+  default     = 30090
+}
+
+# Kubernetes настройки
+variable "kubeconfig_path" {
+  description = "Путь к kubeconfig файлу"
   type        = string
-  default     = "172.20.0.0/16"
+  default     = "~/.kube/config"
 }
 
-variable "node_instance_types" {
-  description = "Типы инстансов для worker nodes"
-  type        = list(string)
-  default     = ["m5.large", "m5.xlarge"]
-}
-
-variable "node_min_size" {
-  description = "Минимальное количество worker nodes"
+# Legacy системы
+variable "legacy_vm_count" {
+  description = "Количество legacy контейнеров (виртуальных машин)"
   type        = number
   default     = 2
+  
+  validation {
+    condition     = var.legacy_vm_count >= 0 && var.legacy_vm_count <= 4
+    error_message = "Legacy VM count must be between 0 and 4."
+  }
 }
 
-variable "node_max_size" {
-  description = "Максимальное количество worker nodes"
-  type        = number
-  default     = 10
-}
-
-variable "node_desired_size" {
-  description = "Желаемое количество worker nodes"
-  type        = number
-  default     = 3
-}
-
-variable "node_disk_size" {
-  description = "Размер диска для worker nodes (GB)"
-  type        = number
-  default     = 50
-}
-
-# Базы данных переменные
-variable "rds_instance_type" {
-  description = "Тип инстанса RDS"
+# Учетные данные БД
+variable "postgres_db_name" {
+  description = "Имя базы данных PostgreSQL"
   type        = string
-  default     = "db.t3.large"
+  default     = "metadata"
+  
+  sensitive = true
 }
 
-variable "db_username" {
-  description = "Имя пользователя БД"
+variable "postgres_username" {
+  description = "Имя пользователя PostgreSQL"
   type        = string
   default     = "admin"
   
   sensitive = true
 }
 
-variable "db_password" {
-  description = "Пароль пользователя БД"
+variable "minio_username" {
+  description = "Имя пользователя MinIO"
   type        = string
+  default     = "admin"
   
   sensitive = true
 }
 
-variable "redis_node_type" {
-  description = "Тип ноды Redis"
-  type        = string
-  default     = "cache.t3.micro"
-}
-
-# Виртуальные машины переменные
-variable "legacy_vm_count" {
-  description = "Количество legacy VM"
-  type        = number
-  default     = 2
-}
-
-variable "legacy_vm_instance_type" {
-  description = "Тип инстанса для legacy VM"
-  type        = string
-  default     = "t3.medium"
-}
-
-# Теги
-variable "common_tags" {
-  description = "Общие теги для всех ресурсов"
-  type        = map(string)
-  default = {
-    Project     = "Future-2.0"
-    ManagedBy   = "Terraform"
-    Environment = "dev"
-  }
-}
+# Пароли будут сгенерированы автоматически через random_password

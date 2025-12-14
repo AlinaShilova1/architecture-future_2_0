@@ -9,129 +9,59 @@ output "docker_network_subnet" {
   value       = docker_network.future_network.ipam_config[0].subnet
 }
 
-# Базы данных
-output "postgres_connection" {
-  description = "Данные для подключения к PostgreSQL"
+# Сервисы
+output "services" {
+  description = "Развернутые сервисы"
   value = {
-    host     = "localhost"
-    port     = var.postgres_port
-    database = var.postgres_db_name
-    username = var.postgres_username
-    password = random_password.postgres_password.result
-  }
-  sensitive = true
-}
-
-output "redis_connection" {
-  description = "Данные для подключения к Redis"
-  value = {
-    host     = "localhost"
-    port     = var.redis_port
-    password = random_password.redis_password.result
-  }
-  sensitive = true
-}
-
-# Data Lakes - ИСПРАВЛЕНО: добавлен sensitive = true
-output "medical_data_lake" {
-  description = "Данные медицинского Data Lake"
-  value = {
-    endpoint      = "http://localhost:${var.minio_medical_port}"
-    console       = "http://localhost:${var.minio_medical_console_port}"
-    username      = var.minio_username
-    password      = random_password.minio_password.result
-    bucket_policy = "Только для медицинских данных"
-  }
-  sensitive = true
-}
-
-output "financial_data_lake" {
-  description = "Данные финансового Data Lake"
-  value = {
-    endpoint      = "http://localhost:${var.minio_financial_port}"
-    console       = "http://localhost:${var.minio_financial_console_port}"
-    username      = var.minio_username
-    password      = random_password.minio_password.result
-    bucket_policy = "Только для финансовых данных"
-  }
-  sensitive = true
-}
-
-# Kubernetes
-output "kubernetes_cluster" {
-  description = "Информация о Kubernetes кластере"
-  value = {
-    name       = "${var.project_name}-${var.environment}"
-    kubeconfig = var.kubeconfig_path
-    namespaces = {
-      medical   = kubernetes_namespace.medical.metadata[0].name
-      fintech   = kubernetes_namespace.fintech.metadata[0].name
-      analytics = kubernetes_namespace.analytics.metadata[0].name
+    postgres = {
+      host = "localhost"
+      port = var.postgres_port
+    }
+    redis = {
+      host = "localhost"
+      port = var.redis_port
+    }
+    minio_medical = {
+      api      = "http://localhost:${var.minio_medical_port}"
+      console  = "http://localhost:${var.minio_medical_console_port}"
+    }
+    minio_financial = {
+      api      = "http://localhost:${var.minio_financial_port}"
+      console  = "http://localhost:${var.minio_financial_console_port}"
+    }
+    data_portal = {
+      url = "http://localhost:${var.portal_node_port}"
     }
   }
 }
 
-output "data_portal" {
-  description = "Доступ к порталу данных"
-  value = {
-    name      = "data-portal"
-    namespace = "analytics"
-    url       = "http://localhost:${var.portal_node_port}"
-    type      = "NodePort"
-  }
-}
-
 # Инструкции
-output "infrastructure_summary" {
-  description = "Сводка по развернутой инфраструктуре"
+output "instructions" {
+  description = "Инструкции по использованию"
   value = <<-EOT
   ================================================================================
-  ЛОКАЛЬНАЯ ИНФРАСТРУКТУРА "БУДУЩЕЕ 2.0" УСПЕШНО РАЗВЕРНУТА!
+  ЛОКАЛЬНАЯ ИНФРАСТРУКТУРА "БУДУЩЕЕ 2.0"
   
-  АРХИТЕКТУРНЫЕ КОМПОНЕНТЫ:
+  Развернутые компоненты:
+  1. Сеть Docker: ${docker_network.future_network.name}
+  2. База данных PostgreSQL: localhost:${var.postgres_port}
+  3. Кэш Redis: localhost:${var.redis_port}
+  4. Медицинский Data Lake (MinIO):
+     - API: http://localhost:${var.minio_medical_port}
+     - Консоль: http://localhost:${var.minio_medical_console_port}
+  5. Финансовый Data Lake (MinIO):
+     - API: http://localhost:${var.minio_financial_port}
+     - Консоль: http://localhost:${var.minio_financial_console_port}
+  6. Портал данных: http://localhost:${var.portal_node_port}
   
-  1. СЕТЬ (Аналог VPC):
-     - Имя: ${docker_network.future_network.name}
-     - Подсеть: ${docker_network.future_network.ipam_config[0].subnet}
+  Kubernetes манифесты созданы в папке k8s-manifests/
   
-  2. БАЗЫ ДАННЫХ (Аналог RDS/ElastiCache):
-     - PostgreSQL (метаданные): localhost:${var.postgres_port}
-     - Redis (кэш): localhost:${var.redis_port}
+  Команды для проверки:
+  docker ps
+  docker network inspect ${docker_network.future_network.name}
   
-  3. DATA LAKES (Аналог S3):
-     - Медицинский: http://localhost:${var.minio_medical_port}
-       Консоль: http://localhost:${var.minio_medical_console_port}
-     - Финансовый: http://localhost:${var.minio_financial_port}
-       Консоль: http://localhost:${var.minio_financial_console_port}
-  
-  4. KUBERNETES КЛАСТЕР (Аналог EKS):
-     - Имя: ${var.project_name}-${var.environment}
-     - Namespaces: medical, fintech, analytics
-  
-  5. ПОРТАЛ ДАННЫХ:
-     - URL: http://localhost:${var.portal_node_port}
-  
-  6. LEGACY СИСТЕМЫ (${var.legacy_vm_count} VM):
-     Смоделированы как отдельные сервисы
-  
-  КОМАНДЫ ДЛЯ УПРАВЛЕНИЯ:
-  
-  1. Проверить состояние контейнеров:
-     docker ps --filter "label=project=${var.project_name}"
-  
-  2. Подключиться к Kubernetes:
-     export KUBECONFIG="${var.kubeconfig_path}"
-     kubectl get nodes
-     kubectl get pods -A
-  
-  3. Проверить доступность сервисов:
-     curl http://localhost:${var.portal_node_port}
-  
-  4. Уничтожить инфраструктуру:
-     terraform destroy
-  
-  ПРИМЕЧАНИЕ: Это локальная эмуляция облачной архитектуры.
-  В production-среде компоненты заменяются на AWS RDS, S3, EKS и т.д.
+  Для применения Kubernetes манифестов (если установлен kubectl):
+  kubectl apply -f k8s-manifests/
   ================================================================================
   EOT
 }

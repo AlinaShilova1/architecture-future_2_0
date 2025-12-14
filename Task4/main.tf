@@ -6,21 +6,9 @@ terraform {
       source  = "kreuzwerker/docker"
       version = "~> 2.23"
     }
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.23"
-    }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "~> 2.11"
-    }
     local = {
       source  = "hashicorp/local"
       version = "~> 2.4"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.5"
     }
     null = {
       source  = "hashicorp/null"
@@ -28,53 +16,14 @@ terraform {
     }
   }
   
-  # Локальный бэкенд - состояние хранится в файле
   backend "local" {
     path = "terraform.tfstate"
   }
 }
 
-# Генерация случайных паролей
-resource "random_password" "postgres_password" {
-  length  = 16
-  special = false
-}
-
-resource "random_password" "minio_password" {
-  length  = 16
-  special = false
-}
-
-resource "random_password" "redis_password" {
-  length  = 16
-  special = false
-}
-
 # ==================== ПРОВАЙДЕРЫ ====================
 provider "docker" {
   host = var.docker_host
-}
-
-provider "kubernetes" {
-  config_path = var.kubeconfig_path
-}
-
-provider "helm" {
-  kubernetes {
-    config_path = var.kubeconfig_path
-  }
-}
-
-# Локальные переменные для удобства
-locals {
-  network_subnet = one([for config in docker_network.future_network.ipam_config : config.subnet])
-  container_names = [
-    docker_container.postgres_metadata.name,
-    docker_container.redis_cache.name,
-    docker_container.minio_medical.name,
-    docker_container.minio_financial.name,
-    docker_container.legacy_service.name
-  ]
 }
 
 # ==================== DOCKER СЕТЬ (Аналог VPC) ====================
@@ -94,9 +43,9 @@ resource "docker_container" "postgres_metadata" {
   image = "postgres:15-alpine"
   
   env = [
-    "POSTGRES_DB=${var.postgres_db_name}",
-    "POSTGRES_USER=${var.postgres_username}",
-    "POSTGRES_PASSWORD=${random_password.postgres_password.result}",
+    "POSTGRES_DB=metadata",
+    "POSTGRES_USER=admin",
+    "POSTGRES_PASSWORD=admin123",
     "PGDATA=/var/lib/postgresql/data/pgdata"
   ]
   
@@ -109,33 +58,11 @@ resource "docker_container" "postgres_metadata" {
     name = docker_network.future_network.name
   }
   
-  volumes {
-    container_path = "/var/lib/postgresql/data"
-    host_path      = "${var.data_directory}/postgres"
-  }
-  
   restart = "unless-stopped"
-  
-  healthcheck {
-    test     = ["CMD-SHELL", "pg_isready -U ${var.postgres_username}"]
-    interval = "10s"
-    timeout  = "5s"
-    retries  = 5
-  }
   
   labels {
     label = "service"
     value = "database"
-  }
-  
-  labels {
-    label = "domain"
-    value = "analytics"
-  }
-  
-  labels {
-    label = "database"
-    value = "postgres"
   }
 }
 
@@ -144,7 +71,7 @@ resource "docker_container" "redis_cache" {
   name  = "${var.project_name}-${var.environment}-redis-cache"
   image = "redis:7-alpine"
   
-  command = ["redis-server", "--requirepass", random_password.redis_password.result]
+  command = ["redis-server", "--requirepass", "redis123"]
   
   ports {
     internal = 6379
@@ -155,21 +82,11 @@ resource "docker_container" "redis_cache" {
     name = docker_network.future_network.name
   }
   
-  volumes {
-    container_path = "/data"
-    host_path      = "${var.data_directory}/redis"
-  }
-  
   restart = "unless-stopped"
   
   labels {
     label = "service"
     value = "cache"
-  }
-  
-  labels {
-    label = "domain"
-    value = "shared"
   }
 }
 
@@ -182,8 +99,8 @@ resource "docker_container" "minio_medical" {
   command = ["server", "/data", "--console-address", ":9001"]
   
   env = [
-    "MINIO_ROOT_USER=${var.minio_username}",
-    "MINIO_ROOT_PASSWORD=${random_password.minio_password.result}",
+    "MINIO_ROOT_USER=admin",
+    "MINIO_ROOT_PASSWORD=minio123",
     "MINIO_BROWSER=on"
   ]
   
@@ -200,26 +117,11 @@ resource "docker_container" "minio_medical" {
     name = docker_network.future_network.name
   }
   
-  volumes {
-    container_path = "/data"
-    host_path      = "${var.data_directory}/minio-medical"
-  }
-  
   restart = "unless-stopped"
   
   labels {
     label = "service"
     value = "storage"
-  }
-  
-  labels {
-    label = "domain"
-    value = "medical"
-  }
-  
-  labels {
-    label = "data-lake"
-    value = "medical"
   }
 }
 
@@ -231,8 +133,8 @@ resource "docker_container" "minio_financial" {
   command = ["server", "/data", "--console-address", ":9001"]
   
   env = [
-    "MINIO_ROOT_USER=${var.minio_username}",
-    "MINIO_ROOT_PASSWORD=${random_password.minio_password.result}"
+    "MINIO_ROOT_USER=admin",
+    "MINIO_ROOT_PASSWORD=minio123"
   ]
   
   ports {
@@ -248,31 +150,15 @@ resource "docker_container" "minio_financial" {
     name = docker_network.future_network.name
   }
   
-  volumes {
-    container_path = "/data"
-    host_path      = "${var.data_directory}/minio-financial"
-  }
-  
   restart = "unless-stopped"
   
   labels {
     label = "service"
     value = "storage"
   }
-  
-  labels {
-    label = "domain"
-    value = "fintech"
-  }
-  
-  labels {
-    label = "data-lake"
-    value = "financial"
-  }
 }
 
-# ==================== СИМУЛЯЦИЯ KUBERNETES РЕСУРСОВ ====================
-# Вместо реальных Kubernetes ресурсов создаем файлы манифестов
+# ==================== KUBERNETES МАНИФЕСТЫ (Аналог EKS) ====================
 resource "local_file" "namespace_medical" {
   filename = "${path.module}/k8s-manifests/namespace-medical.yaml"
   content  = <<-EOT
@@ -283,8 +169,6 @@ metadata:
   labels:
     domain: medical
     managed-by: terraform
-  annotations:
-    description: "Пространство для медицинских сервисов"
 EOT
 }
 
@@ -298,8 +182,6 @@ metadata:
   labels:
     domain: fintech
     managed-by: terraform
-  annotations:
-    description: "Пространство для финтех-сервисов"
 EOT
 }
 
@@ -313,8 +195,6 @@ metadata:
   labels:
     domain: analytics
     managed-by: terraform
-  annotations:
-    description: "Пространство для аналитических сервисов"
 EOT
 }
 
@@ -328,8 +208,6 @@ metadata:
   namespace: analytics
   labels:
     app: data-portal
-    domain: analytics
-    service: portal
 spec:
   replicas: 1
   selector:
@@ -345,13 +223,6 @@ spec:
         image: nginx:alpine
         ports:
         - containerPort: 80
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 200m
-            memory: 256Mi
 ---
 apiVersion: v1
 kind: Service
@@ -369,7 +240,7 @@ spec:
 EOT
 }
 
-# ==================== СИМУЛЯЦИЯ ВИРТУАЛЬНЫХ МАШИН ====================
+# ==================== LEGACY СИСТЕМЫ ====================
 resource "docker_container" "legacy_service" {
   name  = "${var.project_name}-${var.environment}-legacy-service"
   image = "busybox:latest"
@@ -378,21 +249,6 @@ resource "docker_container" "legacy_service" {
   
   networks_advanced {
     name = docker_network.future_network.name
-  }
-  
-  labels {
-    label = "service"
-    value = "legacy"
-  }
-  
-  labels {
-    label = "vm-type"
-    value = "legacy-app"
-  }
-  
-  labels {
-    label = "managed-by"
-    value = "terraform"
   }
   
   restart = "unless-stopped"

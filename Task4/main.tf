@@ -74,11 +74,11 @@ resource "docker_network" "future_network" {
     gateway = cidrhost(var.network_subnet, 1)
   }
   
-  # ИСПРАВЛЕНО: labels как блок, а не аргумент
-  labels {
-    project     = var.project_name
-    environment = var.environment
-    managed-by  = "terraform"
+  # Для docker_network labels задаются через атрибут, а не блок
+  labels = {
+    "project"     = var.project_name
+    "environment" = var.environment
+    "managed-by"  = "terraform"
   }
 }
 
@@ -118,10 +118,11 @@ resource "docker_container" "postgres_metadata" {
     retries  = 5
   }
   
-  labels {
-    service  = "database"
-    domain   = "analytics"
-    database = "postgres"
+  # Для docker_container labels также задаются через атрибут
+  labels = {
+    "service"  = "database"
+    "domain"   = "analytics"
+    "database" = "postgres"
   }
 }
 
@@ -148,9 +149,9 @@ resource "docker_container" "redis_cache" {
   
   restart = "unless-stopped"
   
-  labels {
-    service = "cache"
-    domain  = "shared"
+  labels = {
+    "service" = "cache"
+    "domain"  = "shared"
   }
 }
 
@@ -188,10 +189,10 @@ resource "docker_container" "minio_medical" {
   
   restart = "unless-stopped"
   
-  labels {
-    service    = "storage"
-    domain     = "medical"
-    data-lake  = "medical"
+  labels = {
+    "service"    = "storage"
+    "domain"     = "medical"
+    "data-lake"  = "medical"
   }
 }
 
@@ -227,10 +228,10 @@ resource "docker_container" "minio_financial" {
   
   restart = "unless-stopped"
   
-  labels {
-    service    = "storage"
-    domain     = "fintech"
-    data-lake  = "financial"
+  labels = {
+    "service"    = "storage"
+    "domain"     = "fintech"
+    "data-lake"  = "financial"
   }
 }
 
@@ -280,28 +281,30 @@ resource "null_resource" "create_kind_cluster" {
   provisioner "local-exec" {
     command = <<-EOT
       # Проверяем, существует ли кластер
-      if ! kind get clusters | grep -q "${var.project_name}-${var.environment}"; then
+      if ! kind get clusters 2>/dev/null | grep -q "${var.project_name}-${var.environment}"; then
+        echo "Creating Kind cluster: ${var.project_name}-${var.environment}"
         kind create cluster --config ${local_file.kind_config.filename} --wait 5m
       else
         echo "Cluster ${var.project_name}-${var.environment} already exists"
       fi
       
-      # Устанавливаем ingress-nginx
-      kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+      # Устанавливаем ingress-nginx (если не установлен)
+      if ! kubectl get namespace ingress-nginx 2>/dev/null; then
+        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+      fi
       
       # Ждем готовности ingress-nginx
       kubectl wait --namespace ingress-nginx \
         --for=condition=ready pod \
         --selector=app.kubernetes.io/component=controller \
-        --timeout=90s
+        --timeout=90s 2>/dev/null || true
     EOT
     
     interpreter = ["/bin/bash", "-c"]
   }
   
   depends_on = [
-    local_file.kind_config,
-    docker_network.future_network
+    local_file.kind_config
   ]
 }
 
@@ -311,12 +314,12 @@ resource "kubernetes_namespace" "medical" {
     name = "medical"
     
     labels = {
-      domain     = "medical"
-      managed-by = "terraform"
+      "domain"     = "medical"
+      "managed-by" = "terraform"
     }
     
     annotations = {
-      description = "Пространство для медицинских сервисов"
+      "description" = "Пространство для медицинских сервисов"
     }
   }
   
@@ -328,12 +331,12 @@ resource "kubernetes_namespace" "fintech" {
     name = "fintech"
     
     labels = {
-      domain     = "fintech"
-      managed-by = "terraform"
+      "domain"     = "fintech"
+      "managed-by" = "terraform"
     }
     
     annotations = {
-      description = "Пространство для финтех-сервисов"
+      "description" = "Пространство для финтех-сервисов"
     }
   }
   
@@ -345,12 +348,12 @@ resource "kubernetes_namespace" "analytics" {
     name = "analytics"
     
     labels = {
-      domain     = "analytics"
-      managed-by = "terraform"
+      "domain"     = "analytics"
+      "managed-by" = "terraform"
     }
     
     annotations = {
-      description = "Пространство для аналитических сервисов"
+      "description" = "Пространство для аналитических сервисов"
     }
   }
   
@@ -394,9 +397,9 @@ resource "kubernetes_deployment" "portal" {
     namespace = kubernetes_namespace.analytics.metadata[0].name
     
     labels = {
-      app     = "data-portal"
-      domain  = "analytics"
-      service = "portal"
+      "app"     = "data-portal"
+      "domain"  = "analytics"
+      "service" = "portal"
     }
   }
   
@@ -405,14 +408,14 @@ resource "kubernetes_deployment" "portal" {
     
     selector {
       match_labels = {
-        app = "data-portal"
+        "app" = "data-portal"
       }
     }
     
     template {
       metadata {
         labels = {
-          app = "data-portal"
+          "app" = "data-portal"
         }
       }
       
@@ -433,12 +436,12 @@ resource "kubernetes_deployment" "portal" {
           
           resources {
             requests = {
-              cpu    = "100m"
-              memory = "128Mi"
+              "cpu"    = "100m"
+              "memory" = "128Mi"
             }
             limits = {
-              cpu    = "200m"
-              memory = "256Mi"
+              "cpu"    = "200m"
+              "memory" = "256Mi"
             }
           }
         }
@@ -465,7 +468,7 @@ resource "kubernetes_service" "portal" {
   
   spec {
     selector = {
-      app = "data-portal"
+      "app" = "data-portal"
     }
     
     port {
@@ -481,18 +484,22 @@ resource "kubernetes_service" "portal" {
 }
 
 # ==================== СИМУЛЯЦИЯ ВИРТУАЛЬНЫХ МАШИН ====================
-# Docker контейнеры как "виртуальные машины" для legacy систем
-resource "null_resource" "legacy_vms" {
-  count = var.legacy_vm_count
+# Дополнительный сервис для legacy систем
+resource "docker_container" "legacy_service" {
+  name  = "${var.project_name}-${var.environment}-legacy-service"
+  image = "busybox:latest"
   
-  triggers = {
-    always_run = timestamp()
+  command = ["sh", "-c", "echo 'Legacy service is running' && tail -f /dev/null"]
+  
+  networks_advanced {
+    name = docker_network.future_network.name
   }
   
-  provisioner "local-exec" {
-    command = <<-EOT
-      echo "Legacy VM ${count.index + 1} would be created here"
-      echo "In production, this would be an EC2 instance with specific configuration"
-    EOT
+  labels = {
+    "service"    = "legacy"
+    "vm-type"    = "legacy-app"
+    "managed-by" = "terraform"
   }
+  
+  restart = "unless-stopped"
 }

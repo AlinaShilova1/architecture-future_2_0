@@ -1,0 +1,11 @@
+project_name = "future-2-0"
+environment = "dev"
+docker_host = "unix:///var/run/docker.sock"
+network_subnet = "172.20.0.0/24"
+postgres_port = 5432
+redis_port = 6379
+minio_medical_port = 9000
+minio_medical_console_port = 9001
+minio_financial_port = 9002
+minio_financial_console_port = 9003
+portal_node_port = 30090

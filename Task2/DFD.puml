@@ -1,0 +1,78 @@
+@startuml
+title Data Flow Diagram: Независимые домены "Будущее 2.0"
+
+skinparam componentStyle rectangle
+skinparam linetype ortho
+
+' === Определение доменов ===
+package "Финтех-домен (Банк)" as FintechDomain {
+  component "Банковское ядро" as BankingCore
+  component "Платежный сервис" as PaymentService
+  database "Фин. транзакции\nи счета (OLTP)" as FinOLTP
+  database "Финансовый\nData Lake" as FinDataLake
+}
+
+package "Медицинский домен (Клиники)" as MedicalDomain {
+  component "EHR-система" as EHR
+  database "Мед. карты\nи снимки (OLTP)" as MedOLTP
+  database "Медицинский\nData Lake" as MedDataLake
+}
+
+package "ИИ-Сервис домен" as AIDomain {
+  component "ИИ-сервис анализа" as AIService
+  database "Обогащенные\nданные" as AIDataLake
+}
+
+package "Аналитический домен" as AnalyticsDomain {
+  component "Облачное DWH" as CloudDWH
+  component "Портал\nсамообслуживания" as Portal
+  component "Сервис отчетности" as Reporting
+}
+
+package "Интеграционный слой" as Integration {
+  component "Event Bus\n(Кафка)" as EventBus
+  component "API Gateway\nдля партнеров" as PartnerAPI
+}
+
+package "Партнерский домен\n(Будущее)" as PartnerDomain {
+  component "Фармак. компания\nили произв. оборудования" as Partner
+}
+
+' === Основные потоки данных для бизнес-сценариев ===
+' 1. Сценарий: Клиент оплачивает лечение
+FinOLTP --> BankingCore : Хранит счета
+BankingCore --> PaymentService : Инициирует платеж
+PaymentService --> EventBus : **Событие: "Платеж завершен"**
+EventBus --> EHR : Уведомление об оплате для открытия доступа к услуге
+
+' 2. Сценарий: Использование ИИ для анализа
+EHR --> MedDataLake : Выгрузка анонимных снимков
+MedDataLake --> AIService : Запрос на анализ
+AIService --> AIDataLake : Сохранение результатов
+AIService --> EHR : **API Ответ: Диагностика и рекомендации**
+
+' 3. Сценарий: Аналитика и отчетность (DWH - потребитель данных)
+FinDataLake --> CloudDWH : **Поток агрегированных\nфинансовых KPI**
+MedDataLake --> CloudDWH : **Поток анонимных\nмед. метрик (не PII)**
+AIDataLake --> CloudDWH : **Поток обогащенных\nданных для аналитики**
+CloudDWH --> Reporting : Запросы для отчетов
+Reporting --> Portal : Готовые дашборды
+
+' 4. Сценарий: Интеграция нового партнера (фармацевтика)
+MedDataLake --> PartnerAPI : **API: Анонимизированные\nданные об эффективности лечения**
+PartnerAPI --> Partner : Данные для R&D
+Partner --> PartnerAPI : **API: Информация о препаратах**
+PartnerAPI --> EHR : Интеграция в назначения врача
+
+' 5. Сценарий: Оперативные уведомления между доменами
+EHR --> EventBus : **Событие: "Завершен прием пациента"**
+EventBus --> BankingCore : Триггер для формирования счета
+
+' === Ключевые связи внутри доменов ===
+BankingCore --> FinOLTP : Операции
+PaymentService --> FinOLTP : Логи платежей
+BankingCore --> FinDataLake : Выгрузка сырых данных\nдля аналитики
+EHR --> MedOLTP : Операции
+EHR --> MedDataLake : Выгрузка данных\n(обезличенных)
+
+@enduml

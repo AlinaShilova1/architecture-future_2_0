@@ -1,0 +1,94 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title C4 Container Diagram - Целевая архитектура "Будущее 2.0" через год
+
+Person(employee, "Сотрудник компании", "Сотрудник из клиник, финансового подразделения или аналитик")
+Person(doctor, "Врач", "Использует ИИ-сервисы для диагностики")
+Person(client, "Клиент", "Пользуется медицинскими и финансовыми услугами")
+
+System_Boundary(cloud, "Облачная инфраструктура") {
+
+  System_Boundary(data_portal, "Портал данных самообслуживания") {
+    Container(web_portal, "Веб-приложение портала", "React/TypeScript", "Предоставляет интерфейс для создания отчетов, дашбордов, фильтрации данных")
+    Container(api_gateway, "API Gateway", "Kong/AWS API Gateway", "Маршрутизация, аутентификация, авторизация")
+    Container(reporting_service, "Сервис отчетности", "Java/Python", "Генерация отчетов, управление запросами")
+  }
+
+  Container(data_catalog, "Каталог данных", "Apache Atlas/DataHub", "Метаданные, поиск данных, управление доступом, lineage")
+
+  System_Boundary(medical_domain, "Медицинский домен") {
+    Container(ehr_system, "EHR Система", "HL7 FHIR Server", "Электронные медицинские карты, история болезни, исследования")
+    Container(ai_medical_service, "ИИ-сервис мед. анализа", "Python (FastAPI)", "Анализ снимков, диагностика, рекомендации")
+    ContainerDb(medical_data_lake, "Medical Data Lake", "AWS S3 / Azure Blob", "Хранение медицинских изображений и данных исследований")
+  }
+
+  System_Boundary(fintech_domain, "Финтех-домен") {
+    Container(banking_core, "Банковское ядро", "Java/Golang", "Управление счетами, кредитами, транзакциями")
+    Container(payment_service, "Платежный сервис", "Golang", "Обработка платежей, интеграции")
+    ContainerDb(financial_data_lake, "Financial Data Lake", "AWS S3 / Azure Blob", "Финансовые транзакции, отчетность")
+  }
+
+  System_Boundary(analytics_domain, "Аналитический домен") {
+    ContainerDb(data_warehouse, "Облачное DWH", "Snowflake / BigQuery / Redshift", "Хранение аналитических данных, агрегаты")
+    Container(etl_orchestrator, "Orchestrator", "Apache Airflow / Dagster", "Управление ETL/ELT пайплайнами")
+    Container(bi_service, "BI Сервис", "Power BI Embedded / Superset", "Визуализация, дашборды")
+  }
+
+  System_Boundary(integration_domain, "Интеграционный слой") {
+    Container(event_bus, "Event Bus", "Apache Kafka / AWS EventBridge", "Асинхронная интеграция между доменами")
+    Container(api_integration, "API Management", "Azure API Management / Apigee", "Синхронные API, версионирование")
+    Container(data_pipeline, "Data Pipeline", "Apache Spark / AWS Glue", "Трансформация данных для DWH")
+  }
+
+  ContainerDb(central_metadata, "Метаданные и справочники", "PostgreSQL", "Общие справочники: клиенты, персонал, продукты")
+}
+
+' Связи между каталогом данных и другими компонентами
+Rel(data_catalog, data_warehouse, "Сканирование метаданных DWH", "JDBC/спец. коннекторы")
+Rel(data_catalog, medical_data_lake, "Сканирование метаданных мед. данных", "S3 API/Metadata API")
+Rel(data_catalog, financial_data_lake, "Сканирование метаданных фин. данных", "S3 API/Metadata API")
+Rel(data_catalog, central_metadata, "Регистрация бизнес-метаданных", "JDBC/API")
+
+Rel(web_portal, data_catalog, "Поиск наборов данных, просмотр lineage", "REST API")
+Rel(reporting_service, data_catalog, "Проверка доступов к данным", "REST API")
+Rel(employee, data_catalog, "Поиск данных, запрос доступа", "Через портал")
+Rel(data_pipeline, data_catalog, "Регистрация новых наборов данных", "API")
+Rel(etl_orchestrator, data_catalog, "Регистрация lineage пайплайнов", "API")
+
+' Остальные связи
+Rel(employee, web_portal, "Создает отчеты, просматривает дашборды", "HTTPS")
+Rel(doctor, ehr_system, "Вводит диагнозы, просматривает историю", "HTTPS")
+Rel(doctor, ai_medical_service, "Отправляет снимки для анализа", "gRPC/HTTPS")
+Rel(client, banking_core, "Управляет счетами, кредитами", "HTTPS")
+Rel(client, payment_service, "Совершает платежи", "HTTPS")
+
+Rel(web_portal, api_gateway, "Запросы данных, отчетов", "REST/GraphQL")
+Rel(api_gateway, reporting_service, "Делегирование запросов", "REST")
+Rel(reporting_service, data_warehouse, "Чтение агрегированных данных", "SQL/JDBC")
+Rel(reporting_service, financial_data_lake, "Чтение финансовых данных", "S3 API")
+Rel(reporting_service, central_metadata, "Чтение справочников", "JDBC")
+
+Rel(ehr_system, medical_data_lake, "Сохраняет снимки и данные", "S3 API")
+Rel(ai_medical_service, medical_data_lake, "Читает/пишет данные исследований", "S3 API")
+Rel(banking_core, financial_data_lake, "Экспорт транзакций", "Kafka/S3 API")
+
+Rel(etl_orchestrator, data_pipeline, "Запуск трансформаций", "REST/CLI")
+Rel(data_pipeline, financial_data_lake, "Чтение сырых данных", "S3 API")
+Rel(data_pipeline, medical_data_lake, "Чтение данных (анонимных)", "S3 API")
+Rel(data_pipeline, data_warehouse, "Загрузка в DWH", "SQL/Parquet")
+
+Rel(event_bus, data_pipeline, "Триггеры пайплайнов", "Kafka Events")
+Rel(event_bus, banking_core, "События платежей", "Kafka")
+Rel(event_bus, ehr_system, "События приема", "Kafka")
+
+Rel(central_metadata, api_integration, "Предоставляет API справочников", "REST")
+Rel(api_integration, banking_core, "Валидация клиентов", "REST")
+Rel(api_integration, ehr_system, "Получение данных пациента", "REST")
+
+' Легаси-системы (временные)
+ContainerDb(legacy_dwh, "Легаси DWH", "SQL Server 2008", "Временное хранение до полной миграции")
+Rel(data_pipeline, legacy_dwh, "Чтение исторических данных", "ODBC")
+Rel(data_catalog, legacy_dwh, "Сканирование метаданных легаси", "JDBC")
+
+@enduml
